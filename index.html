@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agenda de actividades</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f5f6f3;--card:#fff;--ink:#1c2a27;--mut:#66726f;--ac:#0f5c5a;--hl:#fff3c4;--line:#dfe3df}
+@media(prefers-color-scheme:dark){:root{--bg:#121816;--card:#1b2421;--ink:#e8eeec;--mut:#9aa8a4;--ac:#4fb3ae;--hl:#4a3f12;--line:#2c3834}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink);padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button,input,select,textarea{font:inherit;color:inherit}
+.w{max-width:760px;margin:auto;padding:12px}
+h1{font:700 20px Georgia,serif;margin:0}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:6px 0 10px}
+.tabs button,.b{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 12px;cursor:pointer;white-space:nowrap}
+.tabs .on,.b.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+.b.d{color:#b3261e}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+input,select,textarea{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;width:100%}
+.row input,.row select{width:auto;flex:1 1 130px}
+.it{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--c,#999);border-radius:8px;padding:10px;margin:6px 0;display:flex;gap:10px}
+.it.hl{background:var(--hl)}.it.ok .t{text-decoration:line-through;opacity:.55}
+.it .t{font-weight:600}.m{color:var(--mut);font-size:13px}
+.tt{font:700 17px Georgia,serif;margin:18px 0 4px;padding-bottom:4px;border-bottom:2px solid var(--ac)}
+.dh{margin:14px 0 2px;font-weight:700;color:var(--ac);text-transform:capitalize}
+.chip{font-size:12px;border-radius:99px;padding:1px 8px;background:var(--line)}
+.chip.alta{background:#b3261e;color:#fff}
+dialog{border:0;border-radius:12px;width:min(520px,94vw);background:var(--bg);color:var(--ink)}
+label{display:block;margin:8px 0 2px;font-size:13px;color:var(--mut)}
+.err{color:#b3261e;margin:8px 0}.hide{display:none!important}
+.ck{display:flex;gap:8px;align-items:center}.ck input{width:auto}
+</style></head><body><div class="w">
+
+<div id="login" class="hide"><h1>Agenda de actividades</h1><p class="m">Inicia sesión con tu correo y contraseña.</p>
+<label>Correo</label><input id="le" type="email" autocomplete="username">
+<label>Contraseña</label><input id="lp" type="password" autocomplete="current-password">
+<p id="lerr" class="err"></p>
+<button class="b p" id="lgo">Entrar</button> <button class="b" id="lrs">Olvidé mi contraseña</button></div>
+
+<div id="app" class="hide">
+<div class="bar"><h1 id="hi"></h1><button class="b" id="out">Salir</button></div>
+<div class="tabs" id="tabs"></div>
+
+<div id="v-ag">
+<div class="row"><button class="b p" id="nA">+ Actividad</button><button class="b" id="nT">+ Título</button><button class="b" id="xl">Descargar Excel</button></div>
+<div class="row"><select id="fc" class="hide"></select><select id="fs"><option value="">Todos los estados</option><option>pendiente</option><option>hecha</option><option>reprogramada</option></select>
+<input id="fd" type="date" title="Desde"><input id="fh" type="date" title="Hasta"><input id="fq" placeholder="Buscar"></div>
+<div id="list"></div></div>
+
+<div id="v-re" class="hide"></div>
+
+<div id="v-eq" class="hide"><div class="row"><button class="b p" id="nU">+ Nuevo usuario</button></div><div id="team"></div></div>
+
+<div id="v-pf" class="hide"><label>Hora del correo diario (hora de Guatemala)</label><select id="ph"></select>
+<label class="ck"><input type="checkbox" id="pe"> Recibir correo diario con mis actividades</label><br><button class="b p" id="ps">Guardar</button> <span id="pm" class="m"></span></div>
+</div>
+
+<dialog id="dA"><h1>Actividad</h1><div id="fA"></div><p id="eA" class="err"></p><div class="row"><button class="b p" id="sA">Guardar</button><button class="b" id="cA">Cancelar</button><button class="b d" id="dl">Eliminar</button></div></dialog>
+<dialog id="dU"><h1>Nuevo usuario</h1>
+<label>Nombre</label><input id="un"><label>Correo</label><input id="ue" type="email"><label>Contraseña (mínimo 6)</label><input id="up" type="text">
+<label>Rol</label><select id="ur"><option value="user">Secundario</option><option value="master">Maestro</option></select>
+<label>Color</label><input id="uc" type="color" value="#0f5c5a"><label>Hora del correo diario</label><select id="uh"></select>
+<p id="eU" class="err"></p><div class="row"><button class="b p" id="sU">Crear</button><button class="b" id="cU">Cancelar</button></div></dialog>
+</div>
+
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import{getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,createUserWithEmailAndPassword,sendPasswordResetEmail}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import{getFirestore,collection,doc,getDoc,setDoc,addDoc,updateDoc,deleteDoc,onSnapshot,query,where,writeBatch}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+const cfg={apiKey:"AIzaSyAbL9ts-B-Twue-YVo7UeUBMi8G9AyQOyU",authDomain:"agenda-recordatorios-1ed65.firebaseapp.com",projectId:"agenda-recordatorios-1ed65",storageBucket:"agenda-recordatorios-1ed65.firebasestorage.app",messagingSenderId:"140533787017",appId:"1:140533787017:web:947ee7ac495174cd4fd958"};
+const app=initializeApp(cfg),auth=getAuth(app),db=getFirestore(app);
+const $=i=>document.getElementById(i),esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let me=null,users=[],acts=[],tab="ag",editId=null,unsubs=[];
+const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+const today=()=>iso(new Date()),addD=(s,n)=>{const d=new Date(s+"T12:00");d.setDate(d.getDate()+n);return iso(d)};
+const fdate=s=>new Date(s+"T12:00").toLocaleDateString("es-GT",{weekday:"long",day:"numeric",month:"long"});
+const hours=[...Array(24).keys()].map(h=>`<option value="${h}">${String(h).padStart(2,"0")}:00</option>`).join("");
+$("ph").innerHTML=$("uh").innerHTML=hours;
+const isM=()=>me?.role==="master",uOf=id=>users.find(u=>u.id===id);
+
+// ---- sesión
+$("lgo").onclick=async()=>{$("lerr").textContent="";try{await signInWithEmailAndPassword(auth,$("le").value.trim(),$("lp").value)}catch(e){$("lerr").textContent="Correo o contraseña incorrectos."}};
+$("lrs").onclick=async()=>{const e=$("le").value.trim();if(!e){$("lerr").textContent="Escribe tu correo arriba.";return}try{await sendPasswordResetEmail(auth,e);$("lerr").textContent="Te enviamos un correo para restablecerla."}catch{$("lerr").textContent="No se pudo enviar."}};
+$("out").onclick=()=>signOut(auth);
+onAuthStateChanged(auth,async u=>{unsubs.forEach(f=>f());unsubs=[];
+ if(!u){me=null;$("app").classList.add("hide");$("login").classList.remove("hide");return}
+ let s=await getDoc(doc(db,"users",u.uid));
+ if(!s.exists()){const c=await getDoc(doc(db,"config","init"));
+  if(c.exists()){alert("Tu cuenta aún no tiene perfil. Pide a un maestro que te cree uno.");return signOut(auth)}
+  const b=writeBatch(db);b.set(doc(db,"config","init"),{by:u.uid});
+  b.set(doc(db,"users",u.uid),{name:u.email.split("@")[0],email:u.email,role:"master",color:"#0f5c5a",sendHour:7,emailEnabled:true,active:true});
+  await b.commit();s=await getDoc(doc(db,"users",u.uid))}
+ me={id:u.uid,...s.data()};
+ if(!me.active){alert("Tu usuario está desactivado.");return signOut(auth)}
+ $("login").classList.add("hide");$("app").classList.remove("hide");$("hi").textContent="Hola, "+me.name;
+ $("ph").value=me.sendHour;$("pe").checked=!!me.emailEnabled;
+ $("tabs").innerHTML=[["ag","Agenda"],["re","Recordatorios"],...(isM()?[["eq","Equipo"]]:[]),["pf","Mi perfil"]].map(([k,n])=>`<button data-t="${k}">${n}</button>`).join("");
+ $("tabs").onclick=e=>{if(e.target.dataset.t){tab=e.target.dataset.t;draw()}};
+ if(isM()){unsubs.push(onSnapshot(collection(db,"users"),q=>{users=q.docs.map(d=>({id:d.id,...d.data()}));fillCol();draw()}));
+  unsubs.push(onSnapshot(collection(db,"activities"),q=>{acts=q.docs.map(d=>({id:d.id,...d.data()}));draw()}))}
+ else{users=[me];unsubs.push(onSnapshot(query(collection(db,"activities"),where("ownerUid","==",me.id)),q=>{acts=q.docs.map(d=>({id:d.id,...d.data()}));draw()}))}
+ fillCol();draw()});
+function fillCol(){const f=$("fc");f.classList.toggle("hide",!isM());const v=f.value;f.innerHTML='<option value="">Todos los colaboradores</option>'+users.filter(u=>u.active).map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join("");f.value=v}
+
+// ---- dibujo
+const sort=a=>a.sort((x,y)=>(x.date+(x.time||"")).localeCompare(y.date+(y.time||"")));
+function item(a){const o=uOf(a.ownerUid)||{};
+ if(a.type==="titulo")return`<div class="tt" data-id="${a.id}" style="border-color:${o.color||"var(--ac)"}">${esc(a.title)} ${isM()?`<span class="m">· ${esc(a.ownerName||"")}</span>`:""}</div>`;
+ return`<div class="it ${a.highlight?"hl":""} ${a.status==="hecha"?"ok":""}" style="--c:${o.color||"#999"}" data-id="${a.id}">
+ <input type="checkbox" class="ck1" style="width:auto" ${a.status==="hecha"?"checked":""}>
+ <div style="flex:1"><div class="t">${a.highlight?"★ ":""}${esc(a.title)}</div>
+ <div class="m">${a.time?esc(a.time)+" · ":""}${esc(a.company||"")}${isM()?" · "+esc(a.ownerName||""):""}</div>
+ ${a.notes?`<div class="m">${esc(a.notes)}</div>`:""}
+ <span class="chip ${a.priority}">${esc(a.priority||"media")}</span> <span class="chip">${esc(a.status)}</span></div></div>`}
+function group(list){let h="",d="";for(const a of sort([...list])){if(a.date!==d){d=a.date;h+=`<div class="dh">${fdate(d)}</div>`}h+=item(a)}return h||'<p class="m">No hay actividades. Toca "+ Actividad" para agregar una.</p>'}
+function filtered(){const c=$("fc").value,s=$("fs").value,d=$("fd").value,h=$("fh").value,q=$("fq").value.toLowerCase();
+ return acts.filter(a=>(!c||a.ownerUid===c)&&(!s||a.type==="titulo"||a.status===s)&&(!d||a.date>=d)&&(!h||a.date<=h)&&(!q||(a.title+a.company+a.notes).toLowerCase().includes(q)))}
+function draw(){if(!me)return;
+ [...$("tabs").children].forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
+ for(const k of["ag","re","eq","pf"])$("v-"+k).classList.toggle("hide",k!==tab);
+ if(tab==="ag")$("list").innerHTML=group(filtered());
+ if(tab==="re"){const t=today(),r=acts.filter(a=>a.type!=="titulo"&&a.status!=="hecha"),f=(n,l)=>`<h3>${n} (${l.length})</h3>`+(l.length?group(l):'<p class="m">Nada por aquí.</p>');
+  $("v-re").innerHTML=f("Atrasadas",r.filter(a=>a.date<t))+f("Hoy",r.filter(a=>a.date===t))+f("Mañana",r.filter(a=>a.date===addD(t,1)))+f("Próximos 7 días",r.filter(a=>a.date>addD(t,1)&&a.date<=addD(t,7)))}
+ if(tab==="eq")$("team").innerHTML=users.map(u=>`<div class="it" style="--c:${u.color}"><div style="flex:1"><div class="t">${esc(u.name)} <span class="chip">${u.role==="master"?"maestro":"secundario"}</span> ${u.active?"":'<span class="chip">desactivado</span>'}</div><div class="m">${esc(u.email)} · correo a las ${String(u.sendHour).padStart(2,"0")}:00 ${u.emailEnabled?"":"(apagado)"}</div></div>
+ <select data-h="${u.id}" style="width:auto">${hours.replace(`value="${u.sendHour}"`,`value="${u.sendHour}" selected`)}</select>
+ ${u.id!==me.id?`<button class="b" data-a="${u.id}">${u.active?"Desactivar":"Activar"}</button>`:""}</div>`).join("")}
+$("team").onchange=e=>{if(e.target.dataset.h)updateDoc(doc(db,"users",e.target.dataset.h),{sendHour:+e.target.value})};
+$("team").onclick=e=>{const id=e.target.dataset.a;if(id){const u=uOf(id);updateDoc(doc(db,"users",id),{active:!u.active})}};
+["fc","fs","fd","fh"].forEach(i=>$(i).onchange=draw);$("fq").oninput=draw;
+$("ps").onclick=async()=>{await updateDoc(doc(db,"users",me.id),{sendHour:+$("ph").value,emailEnabled:$("pe").checked});$("pm").textContent="Guardado."};
+
+// ---- actividades
+function openA(a,tipo){editId=a?.id||null;const t=tipo||a?.type||"actividad",v=a||{};$("eA").textContent="";
+ $("dl").classList.toggle("hide",!a);const own=isM()?`<label>Responsable</label><select id="fo">${users.filter(u=>u.active).map(u=>`<option value="${u.id}" ${(v.ownerUid||me.id)===u.id?"selected":""}>${esc(u.name)}</option>`).join("")}</select>`:"";
+ $("fA").dataset.t=t;
+ $("fA").innerHTML=own+`<label>${t==="titulo"?"Título de sección":"Actividad"}</label><input id="ft" value="${esc(v.title)}" placeholder="${t==="titulo"?"Ej. Semana del 6 al 10":"Ej. Visitar a la empresa X"}">
+ <label>Fecha</label><input id="fda" type="date" value="${v.date||today()}">`+(t==="titulo"?"":`
+ <label>Hora (opcional)</label><input id="fti" type="time" value="${v.time||""}"><label>Empresa / lugar</label><input id="fe" value="${esc(v.company)}">
+ <label>Notas</label><textarea id="fn" rows="2">${esc(v.notes)}</textarea>
+ <label>Prioridad</label><select id="fp">${["alta","media","baja"].map(p=>`<option ${(v.priority||"media")===p?"selected":""}>${p}</option>`).join("")}</select>
+ <label>Estado</label><select id="fst">${["pendiente","hecha","reprogramada"].map(p=>`<option ${(v.status||"pendiente")===p?"selected":""}>${p}</option>`).join("")}</select>
+ <label class="ck"><input type="checkbox" id="fh2" ${v.highlight?"checked":""}> Resaltar</label>
+ <label class="ck"><input type="checkbox" id="fr" ${v.remindDayBefore?"checked":""}> Avisarme por correo el día anterior</label>`);
+ $("dA").showModal()}
+$("nA").onclick=()=>openA(null,"actividad");$("nT").onclick=()=>openA(null,"titulo");$("cA").onclick=()=>$("dA").close();
+const clickList=e=>{const el=e.target.closest("[data-id]");if(!el)return;const a=acts.find(x=>x.id===el.dataset.id);
+ if(e.target.classList.contains("ck1")){updateDoc(doc(db,"activities",a.id),{status:e.target.checked?"hecha":"pendiente"});return}openA(a)};
+$("list").onclick=clickList;$("v-re").onclick=clickList;
+$("sA").onclick=async()=>{const t=$("fA").dataset.t,ow=isM()?$("fo").value:me.id,o=uOf(ow)||me;
+ if(!$("ft").value.trim()){$("eA").textContent="Escribe un título.";return}
+ const d={type:t,title:$("ft").value.trim(),date:$("fda").value,ownerUid:ow,ownerName:o.name};
+ if(t==="actividad")Object.assign(d,{time:$("fti").value,company:$("fe").value.trim(),notes:$("fn").value.trim(),priority:$("fp").value,status:$("fst").value,highlight:$("fh2").checked,remindDayBefore:$("fr").checked});
+ try{editId?await updateDoc(doc(db,"activities",editId),d):await addDoc(collection(db,"activities"),d);$("dA").close()}catch(e){$("eA").textContent="No se pudo guardar: "+e.code}};
+$("dl").onclick=async()=>{if(confirm("¿Eliminar?")){await deleteDoc(doc(db,"activities",editId));$("dA").close()}};
+
+// ---- Excel
+$("xl").onclick=()=>{const r=sort(filtered().filter(a=>a.type!=="titulo")).map(a=>({Fecha:a.date,Hora:a.time||"",Actividad:a.title,"Empresa / lugar":a.company||"",Responsable:a.ownerName||"",Prioridad:a.priority,Estado:a.status,Resaltada:a.highlight?"Sí":"",Notas:a.notes||""}));
+ const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(r),"Actividades");XLSX.writeFile(wb,"agenda_"+today()+".xlsx")};
+
+// ---- usuarios nuevos (con app secundaria para no cerrar tu sesión)
+$("nU").onclick=()=>{$("eU").textContent="";$("dU").showModal()};$("cU").onclick=()=>$("dU").close();
+$("sU").onclick=async()=>{const n=$("un").value.trim(),e=$("ue").value.trim(),p=$("up").value;if(!n||!e||p.length<6){$("eU").textContent="Completa nombre, correo y contraseña (6+).";return}
+ try{const a2=initializeApp(cfg,"sec"+Date.now()),au=getAuth(a2),c=await createUserWithEmailAndPassword(au,e,p);await signOut(au);
+  await setDoc(doc(db,"users",c.user.uid),{name:n,email:e,role:$("ur").value,color:$("uc").value,sendHour:+$("uh").value,emailEnabled:true,active:true});
+  ["un","ue","up"].forEach(i=>$(i).value="");$("dU").close()}catch(x){$("eU").textContent="No se pudo crear: "+x.code}};
+</script></body></html>
