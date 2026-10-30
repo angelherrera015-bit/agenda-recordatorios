@@ -76,6 +76,7 @@ const today=()=>iso(new Date()),addD=(s,n)=>{const d=new Date(s+"T12:00");d.setD
 const fdate=s=>new Date(s+"T12:00").toLocaleDateString("es-GT",{weekday:"long",day:"numeric",month:"long"});
 const hours=[...Array(24).keys()].map(h=>`<option value="${h}">${String(h).padStart(2,"0")}:00</option>`).join("");
 $("ph").innerHTML=$("uh").innerHTML=hours;
+const nm=a=>(users.find(u=>u.id===a.ownerUid)||{}).name||a.ownerName||"";
 const isM=()=>me?.role==="master",uOf=id=>users.find(u=>u.id===id);
 
 // ---- sesión
@@ -105,11 +106,11 @@ function fillCol(){const f=$("fc");f.classList.toggle("hide",!isM());const v=f.v
 // ---- dibujo
 const sort=a=>a.sort((x,y)=>(x.date+(x.time||"")).localeCompare(y.date+(y.time||"")));
 function item(a){const o=uOf(a.ownerUid)||{};
- if(a.type==="titulo")return`<div class="tt" data-id="${a.id}" style="border-color:${o.color||"var(--ac)"}">${esc(a.title)} ${isM()?`<span class="m">· ${esc(a.ownerName||"")}</span>`:""}</div>`;
+ if(a.type==="titulo")return`<div class="tt" data-id="${a.id}" style="border-color:${o.color||"var(--ac)"}">${esc(a.title)} ${isM()?`<span class="m">· ${esc(nm(a))}</span>`:""}</div>`;
  return`<div class="it ${a.highlight?"hl":""} ${a.status==="hecha"?"ok":""}" style="--c:${o.color||"#999"}" data-id="${a.id}">
  <input type="checkbox" class="ck1" style="width:auto" ${a.status==="hecha"?"checked":""}>
  <div style="flex:1"><div class="t">${a.highlight?"★ ":""}${esc(a.title)}</div>
- <div class="m">${a.time?esc(a.time)+" · ":""}${esc(a.company||"")}${isM()?" · "+esc(a.ownerName||""):""}</div>
+ <div class="m">${a.time?esc(a.time)+" · ":""}${esc(a.company||"")}${isM()?" · "+esc(nm(a)):""}</div>
  ${a.notes?`<div class="m">${esc(a.notes)}</div>`:""}
  <span class="chip ${a.priority}">${esc(a.priority||"media")}</span> <span class="chip">${esc(a.status)}</span></div></div>`}
 function group(list){let h="",d="";for(const a of sort([...list])){if(a.date!==d){d=a.date;h+=`<div class="dh">${fdate(d)}</div>`}h+=item(a)}return h||'<p class="m">No hay actividades. Toca "+ Actividad" para agregar una.</p>'}
@@ -123,9 +124,10 @@ function draw(){if(!me)return;
   $("v-re").innerHTML=f("Atrasadas",r.filter(a=>a.date<t))+f("Hoy",r.filter(a=>a.date===t))+f("Mañana",r.filter(a=>a.date===addD(t,1)))+f("Próximos 7 días",r.filter(a=>a.date>addD(t,1)&&a.date<=addD(t,7)))}
  if(tab==="eq")$("team").innerHTML=users.map(u=>`<div class="it" style="--c:${u.color}"><div style="flex:1"><div class="t">${esc(u.name)} <span class="chip">${u.role==="master"?"maestro":"secundario"}</span> ${u.active?"":'<span class="chip">desactivado</span>'}</div><div class="m">${esc(u.email)} · correo a las ${String(u.sendHour).padStart(2,"0")}:00 ${u.emailEnabled?"":"(apagado)"}</div></div>
  <select data-h="${u.id}" style="width:auto">${hours.replace(`value="${u.sendHour}"`,`value="${u.sendHour}" selected`)}</select>
+ <button class="b" data-n="${u.id}">Editar nombre</button>
  ${u.id!==me.id?`<button class="b" data-a="${u.id}">${u.active?"Desactivar":"Activar"}</button>`:""}</div>`).join("")}
 $("team").onchange=e=>{if(e.target.dataset.h)updateDoc(doc(db,"users",e.target.dataset.h),{sendHour:+e.target.value})};
-$("team").onclick=e=>{const id=e.target.dataset.a;if(id){const u=uOf(id);updateDoc(doc(db,"users",id),{active:!u.active})}};
+$("team").onclick=e=>{const nid=e.target.dataset.n;if(nid){const u=uOf(nid),n=prompt("Nombre y apellido",u.name);if(n&&n.trim())updateDoc(doc(db,"users",nid),{name:n.trim()});return}const id=e.target.dataset.a;if(id){const u=uOf(id);updateDoc(doc(db,"users",id),{active:!u.active})}};
 ["fc","fs","fd","fh"].forEach(i=>$(i).onchange=draw);$("fq").oninput=draw;
 $("ps").onclick=async()=>{await updateDoc(doc(db,"users",me.id),{sendHour:+$("ph").value,emailEnabled:$("pe").checked});$("pm").textContent="Guardado."};
 
@@ -154,7 +156,7 @@ $("sA").onclick=async()=>{const t=$("fA").dataset.t,ow=isM()?$("fo").value:me.id
 $("dl").onclick=async()=>{if(confirm("¿Eliminar?")){await deleteDoc(doc(db,"activities",editId));$("dA").close()}};
 
 // ---- Excel
-$("xl").onclick=()=>{const r=sort(filtered().filter(a=>a.type!=="titulo")).map(a=>({Fecha:a.date,Hora:a.time||"",Actividad:a.title,"Empresa / lugar":a.company||"",Responsable:a.ownerName||"",Prioridad:a.priority,Estado:a.status,Resaltada:a.highlight?"Sí":"",Notas:a.notes||""}));
+$("xl").onclick=()=>{const r=sort(filtered().filter(a=>a.type!=="titulo")).map(a=>({Fecha:a.date,Hora:a.time||"",Actividad:a.title,"Empresa / lugar":a.company||"",Responsable:nm(a),Prioridad:a.priority,Estado:a.status,Resaltada:a.highlight?"Sí":"",Notas:a.notes||""}));
  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(r),"Actividades");XLSX.writeFile(wb,"agenda_"+today()+".xlsx")};
 
 // ---- usuarios nuevos (con app secundaria para no cerrar tu sesión)
