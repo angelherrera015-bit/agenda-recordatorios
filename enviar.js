@@ -10,7 +10,7 @@ const sec=(t,l)=>l.length?`<h3>${t}</h3><ul>${l.map(li).join('')}</ul>`:'';
 (async()=>{
  const us=await db.collection('users').where('emailEnabled','==',true).get();
  for(const u of us.docs){const d=u.data();
-  if(!d.active||hour<d.sendHour||hour>=d.sendHour+3||d.lastSentDate===today)continue;
+  if(!d.active||hour<d.sendHour||d.lastSentDate===today)continue;
   const as=(await db.collection('activities').where('ownerUid','==',u.id).get()).docs.map(x=>x.data()).filter(a=>a.type!=='titulo'&&a.status!=='hecha');
   const hoy=as.filter(a=>a.date===today),atr=as.filter(a=>a.date<today),man=as.filter(a=>a.date===tmr&&a.remindDayBefore);
   if(hoy.length+atr.length+man.length){
@@ -18,4 +18,4 @@ const sec=(t,l)=>l.length?`<h3>${t}</h3><ul>${l.map(li).join('')}</ul>`:'';
     html:`<p>Hola ${esc(d.name)}:</p>${sec('Hoy',hoy)}${sec('Atrasadas',atr)}${sec('Mañana (aviso previo)',man)}`});
    console.log('Enviado a',d.email)}
   await u.ref.update({lastSentDate:today})}
-})().catch(e=>{console.error(e);process.exit(1)});
+})().catch(e=>{console.error(e);process.exit(1)}); 
